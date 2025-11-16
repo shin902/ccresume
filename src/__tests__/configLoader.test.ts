@@ -23,10 +23,24 @@ describe('configLoader', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     delete process.env.XDG_CONFIG_HOME;
+    delete process.env.CLAUDE_CONFIG_DIR;
   });
 
   describe('getConfigPath', () => {
-    it('should use XDG_CONFIG_HOME when set', () => {
+    it('should use CLAUDE_CONFIG_DIR when set', () => {
+      process.env.CLAUDE_CONFIG_DIR = '/home/user/.config/claude';
+      const path = getConfigPath();
+      expect(path).toBe('/home/user/.config/claude/config.toml');
+    });
+
+    it('should prioritize CLAUDE_CONFIG_DIR over XDG_CONFIG_HOME', () => {
+      process.env.CLAUDE_CONFIG_DIR = '/home/user/.config/claude';
+      process.env.XDG_CONFIG_HOME = '/custom/config';
+      const path = getConfigPath();
+      expect(path).toBe('/home/user/.config/claude/config.toml');
+    });
+
+    it('should use XDG_CONFIG_HOME when set and CLAUDE_CONFIG_DIR is not set', () => {
       process.env.XDG_CONFIG_HOME = '/custom/config';
       const path = getConfigPath();
       expect(path).toBe('/custom/config/ccresume/config.toml');
@@ -36,6 +50,72 @@ describe('configLoader', () => {
       mockHomedir.mockReturnValue('/home/user');
       const path = getConfigPath();
       expect(path).toBe('/home/user/.config/ccresume/config.toml');
+    });
+
+    it('should handle empty CLAUDE_CONFIG_DIR', () => {
+      process.env.CLAUDE_CONFIG_DIR = '';
+      mockHomedir.mockReturnValue('/home/user');
+      const path = getConfigPath();
+      // Should fallback to ~/.config
+      expect(path).toBe('/home/user/.config/ccresume/config.toml');
+    });
+
+    it('should handle whitespace-only CLAUDE_CONFIG_DIR', () => {
+      process.env.CLAUDE_CONFIG_DIR = '   ';
+      mockHomedir.mockReturnValue('/home/user');
+      const path = getConfigPath();
+      // Should fallback to ~/.config
+      expect(path).toBe('/home/user/.config/ccresume/config.toml');
+    });
+
+    it('should handle CLAUDE_CONFIG_DIR with trailing slash', () => {
+      process.env.CLAUDE_CONFIG_DIR = '/home/user/.config/claude/';
+      const path = getConfigPath();
+      expect(path).toBe('/home/user/.config/claude/config.toml');
+      // Path should not contain "//"
+      expect(path).not.toContain('//');
+    });
+
+    it('should handle CLAUDE_CONFIG_DIR with spaces in path', () => {
+      process.env.CLAUDE_CONFIG_DIR = '/home/user/My Documents/claude';
+      const path = getConfigPath();
+      expect(path).toBe('/home/user/My Documents/claude/config.toml');
+    });
+
+    it('should handle relative paths in CLAUDE_CONFIG_DIR', () => {
+      process.env.CLAUDE_CONFIG_DIR = './config';
+
+      // Mock console.warn to suppress warning output in test
+      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+      const path = getConfigPath();
+
+      // Should convert to absolute path
+      expect(path).toContain('config.toml');
+      expect(path.startsWith('/')).toBe(true);
+
+      // Should have warned the user
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('is not an absolute path')
+      );
+
+      consoleWarnSpy.mockRestore();
+    });
+
+    it('should handle empty XDG_CONFIG_HOME', () => {
+      process.env.XDG_CONFIG_HOME = '';
+      mockHomedir.mockReturnValue('/home/user');
+      const path = getConfigPath();
+      // Should fallback to ~/.config
+      expect(path).toBe('/home/user/.config/ccresume/config.toml');
+    });
+
+    it('should handle XDG_CONFIG_HOME with trailing slash', () => {
+      process.env.XDG_CONFIG_HOME = '/custom/config/';
+      const path = getConfigPath();
+      expect(path).toBe('/custom/config/ccresume/config.toml');
+      // Path should not contain "//"
+      expect(path).not.toContain('//');
     });
   });
 

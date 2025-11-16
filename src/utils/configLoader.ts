@@ -1,12 +1,47 @@
 import { parse } from '@iarna/toml';
 import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
+import { join, resolve, isAbsolute } from 'path';
 import { homedir } from 'os';
 import { Config, defaultConfig, KeyBindings } from '../types/config.js';
 
+const CONFIG_FILE_NAME = 'config.toml';
+const DEFAULT_CONFIG_DIR = 'ccresume';
+
+/**
+ * Sanitizes and validates a configuration directory path from environment variable.
+ * @param dir - The directory path from environment variable
+ * @returns Sanitized absolute path or null if invalid
+ */
+function sanitizeConfigDir(dir: string | undefined): string | null {
+  if (!dir?.trim()) {
+    return null;
+  }
+
+  // Remove leading/trailing whitespace and trailing slashes
+  const sanitized = dir.trim().replace(/\/+$/, '');
+
+  if (!isAbsolute(sanitized)) {
+    const absolutePath = resolve(sanitized);
+    console.warn(
+      `Warning: ${sanitized} is not an absolute path. ` +
+      `Using absolute path: ${absolutePath}`
+    );
+    return absolutePath;
+  }
+
+  return sanitized;
+}
+
 export function getConfigPath(): string {
-  const xdgConfigHome = process.env.XDG_CONFIG_HOME || join(homedir(), '.config');
-  return join(xdgConfigHome, 'ccresume', 'config.toml');
+  // Priority: CLAUDE_CONFIG_DIR > XDG_CONFIG_HOME/ccresume > ~/.config/ccresume
+  const claudeConfigDir = sanitizeConfigDir(process.env.CLAUDE_CONFIG_DIR);
+  if (claudeConfigDir) {
+    return join(claudeConfigDir, CONFIG_FILE_NAME);
+  }
+
+  const xdgConfigHome = sanitizeConfigDir(process.env.XDG_CONFIG_HOME)
+    || join(homedir(), '.config');
+  return join(xdgConfigHome, DEFAULT_CONFIG_DIR, CONFIG_FILE_NAME);
 }
 
 export function loadConfig(): Config {
