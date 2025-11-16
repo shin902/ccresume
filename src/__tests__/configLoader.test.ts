@@ -23,10 +23,24 @@ describe('configLoader', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     delete process.env.XDG_CONFIG_HOME;
+    delete process.env.CLAUDE_CONFIG_DIR;
   });
 
   describe('getConfigPath', () => {
-    it('should use XDG_CONFIG_HOME when set', () => {
+    it('should use CLAUDE_CONFIG_DIR when set', () => {
+      process.env.CLAUDE_CONFIG_DIR = '/home/user/.config/claude';
+      const path = getConfigPath();
+      expect(path).toBe('/home/user/.config/claude/config.toml');
+    });
+
+    it('should prioritize CLAUDE_CONFIG_DIR over XDG_CONFIG_HOME', () => {
+      process.env.CLAUDE_CONFIG_DIR = '/home/user/.config/claude';
+      process.env.XDG_CONFIG_HOME = '/custom/config';
+      const path = getConfigPath();
+      expect(path).toBe('/home/user/.config/claude/config.toml');
+    });
+
+    it('should use XDG_CONFIG_HOME when set and CLAUDE_CONFIG_DIR is not set', () => {
       process.env.XDG_CONFIG_HOME = '/custom/config';
       const path = getConfigPath();
       expect(path).toBe('/custom/config/ccresume/config.toml');

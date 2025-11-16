@@ -5,6 +5,11 @@ import { homedir } from 'os';
 import { Config, defaultConfig, KeyBindings } from '../types/config.js';
 
 export function getConfigPath(): string {
+  // Priority: CLAUDE_CONFIG_DIR > XDG_CONFIG_HOME/ccresume > ~/.config/ccresume
+  if (process.env.CLAUDE_CONFIG_DIR) {
+    return join(process.env.CLAUDE_CONFIG_DIR, 'config.toml');
+  }
+
   const xdgConfigHome = process.env.XDG_CONFIG_HOME || join(homedir(), '.config');
   return join(xdgConfigHome, 'ccresume', 'config.toml');
 }
