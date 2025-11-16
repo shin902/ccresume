@@ -138,7 +138,29 @@ The configured options will be passed to Claude when you start a new session (`n
 
 ### Custom Key Bindings
 
-You can customize key bindings by creating a configuration file at `~/.config/ccresume/config.toml`:
+#### Configuration File Location
+
+ccresume looks for its configuration file in the following locations (in order of priority):
+
+1. **`CLAUDE_CONFIG_DIR` environment variable**: If set, ccresume will look for `${CLAUDE_CONFIG_DIR}/config.toml`
+2. **`XDG_CONFIG_HOME` environment variable**: If set, ccresume will look for `${XDG_CONFIG_HOME}/ccresume/config.toml`
+3. **Default location**: `~/.config/ccresume/config.toml`
+
+**Example:**
+```bash
+# Store ccresume config alongside other Claude-related configurations
+export XDG_CONFIG_HOME=~/.config
+export CLAUDE_CONFIG_DIR=${XDG_CONFIG_HOME}/claude
+
+# Or use a custom location
+export CLAUDE_CONFIG_DIR=/path/to/custom/config
+```
+
+**Note:** It is recommended to use absolute paths for `CLAUDE_CONFIG_DIR`.
+
+#### Configuration Format
+
+You can customize key bindings by creating a configuration file:
 
 ```toml
 [keybindings]
