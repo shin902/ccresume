@@ -1,3 +1,24 @@
+/**
+ * Check if content is a tool result message
+ */
+export function isToolResultContent(content: unknown): boolean {
+  if (!content) return false;
+
+  if (Array.isArray(content) && content.length > 0) {
+    const firstItem = content[0];
+    if (firstItem && typeof firstItem === 'object' && 'type' in firstItem) {
+      return firstItem.type === 'tool_result';
+    }
+  }
+
+  // Also check for extracted text format
+  if (typeof content === 'string') {
+    return content.startsWith('[Tool Result]') || content.startsWith('[Tool Output]');
+  }
+
+  return false;
+}
+
 export function extractMessageText(content: string | Array<{ type: string; text?: string; name?: string; input?: unknown }> | undefined | null): string {
   if (!content) {
     return '';

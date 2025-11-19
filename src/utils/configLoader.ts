@@ -20,16 +20,71 @@ function sanitizeConfigDir(dir: string | undefined): string | null {
   // Remove leading/trailing whitespace and trailing slashes
   const sanitized = dir.trim().replace(/\/+$/, '');
 
+  let absolutePath: string;
   if (!isAbsolute(sanitized)) {
-    const absolutePath = resolve(sanitized);
+    absolutePath = resolve(sanitized);
     console.warn(
       `Warning: ${sanitized} is not an absolute path. ` +
       `Using absolute path: ${absolutePath}`
     );
-    return absolutePath;
+  } else {
+    absolutePath = sanitized;
   }
 
-  return sanitized;
+  // Security: Validate that the resolved path doesn't traverse to sensitive directories
+  const normalizedPath = resolve(absolutePath);
+
+  // Block access to system directories (Unix and Windows)
+  const blockedPaths = ['/etc', '/var', '/usr', '/bin', '/sbin', '/root', 'C:\\Windows', 'C:\\Program Files'];
+  for (const blocked of blockedPaths) {
+    if (normalizedPath.toLowerCase().startsWith(blocked.toLowerCase())) {
+      console.warn(
+        `Warning: Config path ${normalizedPath} points to a system directory. ` +
+        `Using default config location.`
+      );
+      return null;
+    }
+  }
+
+  // Also check for path traversal attempts (.. in the resolved path should be gone)
+  if (normalizedPath.includes('..')) {
+    console.warn(
+      `Warning: Config path contains invalid path components. ` +
+      `Using default config location.`
+    );
+    return null;
+  }
+
+  return normalizedPath;
+}
+
+/**
+ * Validates XDG_CONFIG_HOME according to XDG Base Directory Specification.
+ * XDG spec requires paths to be absolute; relative paths should be ignored.
+ */
+function validateXdgConfigHome(dir: string | undefined): string | null {
+  if (!dir?.trim()) {
+    return null;
+  }
+
+  const trimmed = dir.trim();
+
+  // XDG spec: "All paths set in these environment variables must be absolute"
+  if (!isAbsolute(trimmed)) {
+    // According to XDG spec, ignore non-absolute paths
+    return null;
+  }
+
+  // Apply same security checks as sanitizeConfigDir
+  const normalizedPath = resolve(trimmed);
+  const blockedPaths = ['/etc', '/var', '/usr', '/bin', '/sbin', '/root', 'C:\\Windows', 'C:\\Program Files'];
+  for (const blocked of blockedPaths) {
+    if (normalizedPath.toLowerCase().startsWith(blocked.toLowerCase())) {
+      return null;
+    }
+  }
+
+  return normalizedPath;
 }
 
 export function getConfigPath(): string {
@@ -39,25 +94,42 @@ export function getConfigPath(): string {
     return join(claudeConfigDir, CONFIG_FILE_NAME);
   }
 
-  const xdgConfigHome = sanitizeConfigDir(process.env.XDG_CONFIG_HOME)
+  // Use XDG-compliant validation for XDG_CONFIG_HOME
+  const xdgConfigHome = validateXdgConfigHome(process.env.XDG_CONFIG_HOME)
     || join(homedir(), '.config');
   return join(xdgConfigHome, DEFAULT_CONFIG_DIR, CONFIG_FILE_NAME);
 }
 
 export function loadConfig(): Config {
   const configPath = getConfigPath();
-  
+
   if (!existsSync(configPath)) {
     return defaultConfig;
   }
-  
+
+  let tomlContent: string;
   try {
-    const tomlContent = readFileSync(configPath, 'utf-8');
+    tomlContent = readFileSync(configPath, 'utf-8');
+  } catch (error) {
+    const nodeError = error as NodeJS.ErrnoException;
+    if (nodeError.code === 'EACCES') {
+      console.error(`\n⚠️  Permission denied reading config file: ${configPath}`);
+      console.error('   Please check file permissions.\n');
+    } else if (nodeError.code === 'EISDIR') {
+      console.error(`\n⚠️  Config path is a directory: ${configPath}`);
+      console.error('   Expected a file.\n');
+    } else {
+      console.error(`\n⚠️  Failed to read config file ${configPath}:`, nodeError.message);
+    }
+    return defaultConfig;
+  }
+
+  try {
     const parsedConfig = parse(tomlContent) as Partial<Config>;
-    
+
     // Merge with default config to ensure all keys exist
     const config = mergeConfigs(defaultConfig, parsedConfig);
-    
+
     // Check for key conflicts and warn user
     const conflicts = checkKeyConflicts(config.keybindings);
     if (conflicts.length > 0) {
@@ -65,27 +137,32 @@ export function loadConfig(): Config {
       conflicts.forEach(conflict => console.error(`   - ${conflict}`));
       console.error('   Please update your config.toml to resolve conflicts.\n');
     }
-    
+
     return config;
   } catch (error) {
-    console.error(`Failed to load config from ${configPath}:`, error);
+    const parseError = error as Error;
+    console.error(`\n⚠️  Failed to parse config file ${configPath}:`);
+    console.error(`   ${parseError.message}`);
+    console.error('   Please check your TOML syntax.\n');
     return defaultConfig;
   }
 }
 
 function mergeConfigs(defaultConf: Config, userConf: Partial<Config>): Config {
   const merged: Config = JSON.parse(JSON.stringify(defaultConf));
-  
+
   // First, apply user configuration
-  if (userConf.keybindings) {
-    Object.keys(userConf.keybindings).forEach((key) => {
-      const userBinding = userConf.keybindings![key as keyof typeof userConf.keybindings];
+  const userKeybindings = userConf.keybindings;
+  if (userKeybindings) {
+    Object.keys(userKeybindings).forEach((key) => {
+      const bindingKey = key as keyof typeof userKeybindings;
+      const userBinding = userKeybindings[bindingKey];
       if (userBinding) {
-        merged.keybindings[key as keyof typeof merged.keybindings] = userBinding;
+        merged.keybindings[bindingKey] = userBinding;
       }
     });
   }
-  
+
   // Then migrate config with conflict detection based on the merged result
   return migrateConfig(merged, userConf);
 }

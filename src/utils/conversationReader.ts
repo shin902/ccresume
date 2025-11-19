@@ -1,10 +1,24 @@
 import { readdir, readFile, stat } from 'fs/promises';
-import { join, sep, basename } from 'path';
+import { join, sep, basename, isAbsolute, resolve } from 'path';
 import { homedir } from 'os';
 import type { Conversation, Message } from '../types.js';
-import { extractMessageText } from './messageUtils.js';
+import { extractMessageText, isToolResultContent } from './messageUtils.js';
 
-const CLAUDE_PROJECTS_DIR = join(homedir(), '.claude', 'projects');
+/**
+ * Get the Claude projects directory path.
+ * Priority: CLAUDE_PROJECTS_DIR env var > default ~/.claude/projects
+ */
+function getClaudeProjectsDir(): string {
+  const envDir = process.env.CLAUDE_PROJECTS_DIR;
+  if (envDir?.trim()) {
+    const trimmed = envDir.trim();
+    // Convert relative paths to absolute
+    return isAbsolute(trimmed) ? trimmed : resolve(trimmed);
+  }
+  return join(homedir(), '.claude', 'projects');
+}
+
+const CLAUDE_PROJECTS_DIR = getClaudeProjectsDir();
 
 interface PaginationOptions {
   limit: number;
@@ -98,15 +112,24 @@ export async function getPaginatedConversations(options: PaginationOptions): Pro
 
 export async function getAllConversations(currentDirFilter?: string): Promise<Conversation[]> {
   const conversations: Conversation[] = [];
-  
+
   try {
     const projectDirs = await readdir(CLAUDE_PROJECTS_DIR);
-    
+
+    // Convert filter path to Claude's directory name format for early filtering
+    const targetDir = currentDirFilter ? pathToClaudeDir(currentDirFilter) : null;
+
     for (const projectDir of projectDirs) {
+      // Skip directories that don't match the filter early (same as getPaginatedConversations)
+      if (targetDir && projectDir !== targetDir) {
+        continue;
+      }
+
       const projectPath = join(CLAUDE_PROJECTS_DIR, projectDir);
       const files = await readdir(projectPath);
-      const jsonlFiles = files.filter(f => f.endsWith('.jsonl'));
-      
+      const jsonlFiles = files.filter(f => f.endsWith('.jsonl') &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jsonl$/i.test(f));
+
       for (const file of jsonlFiles) {
         const filePath = join(projectPath, file);
         const conversation = await readConversation(filePath, projectDir);
@@ -115,18 +138,10 @@ export async function getAllConversations(currentDirFilter?: string): Promise<Co
         }
       }
     }
-    
-    // Filter by current directory if specified
-    let filteredConversations = conversations;
-    if (currentDirFilter) {
-      filteredConversations = conversations.filter(conv => 
-        conv.projectPath === currentDirFilter
-      );
-    }
-    
-    const result = filteredConversations
+
+    const result = conversations
       .sort((a, b) => b.endTime.getTime() - a.endTime.getTime());
-    
+
     return result;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -156,13 +171,8 @@ async function readConversation(filePath: string, projectDir: string): Promise<C
         // Only include messages with proper structure
         // Skip user messages that are tool results
         if (data && data.type && data.message && data.timestamp) {
-          // Check if it's a user message with tool_result content
-          if (data.type === 'user' && 
-              data.message.content && 
-              Array.isArray(data.message.content) && 
-              data.message.content.length > 0 &&
-              data.message.content[0].type === 'tool_result') {
-            // Skip tool result messages from user
+          // Skip tool result messages from user
+          if (data.type === 'user' && isToolResultContent(data.message.content)) {
             continue;
           }
           messages.push(data as Message);
@@ -177,17 +187,17 @@ async function readConversation(filePath: string, projectDir: string): Promise<C
     }
     
     const userMessages = messages.filter(m => m.type === 'user');
-    
-    const projectName = projectDir.replace(/^-/, '').split('-').join(sep);
-    
+
+    const projectPath = messages[0].cwd || '';
+
+    // Use basename of projectPath for projectName to avoid hyphen/separator ambiguity
+    const projectName = projectPath ? basename(projectPath) : projectDir.replace(/^-/, '').split('-').join(sep);
+
     const startTime = new Date(messages[0].timestamp);
     const endTime = new Date(messages[messages.length - 1].timestamp);
-    
-    
+
     // Use session ID from filename as it's what Claude expects for --resume
     const sessionId = filenameSessionId;
-    
-    const projectPath = messages[0].cwd || '';
     
     // Get gitBranch from the last line of the jsonl file
     // Branch info is stored in the last line by newer versions of Claude Code

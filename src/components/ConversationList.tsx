@@ -3,7 +3,7 @@ import { Box, Text, useStdout } from 'ink';
 import { format } from 'date-fns';
 import type { Conversation } from '../types.js';
 import { generateConversationSummary, formatProjectPath } from '../utils/conversationUtils.js';
-import { getStringDisplayLength } from '../utils/stringUtils.js';
+import { getStringWidth } from '../utils/charWidth.js';
 import { strictTruncateByWidth } from '../utils/strictTruncate.js';
 
 interface ConversationListProps {
@@ -64,7 +64,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({
           const selector = isSelected ? '▶ ' : '  ';
           const dateStr = format(conv.endTime, 'MMM dd HH:mm');
           const fixedPart = `${selector}${dateStr} | ${projectPath}`;
-          const fixedPartLength = getStringDisplayLength(fixedPart);
+          const fixedPartLength = getStringWidth(fixedPart);
           
           // Calculate available space for summary (with separator)
           // Add extra buffer to prevent overflow: borders(2) + padding(2) + selector(2) + safety(10) = 16

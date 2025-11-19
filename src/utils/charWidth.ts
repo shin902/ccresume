@@ -26,27 +26,20 @@ export function getCharWidth(char: string): number {
     return 0; // Skip orphaned low surrogates
   }
   
-  // Emoji blocks (single code point emojis)
+  // Emoji blocks (single code point emojis in BMP - codes below 0xFFFF)
+  // Note: Emoji codes >= 0x1F300 are surrogate pairs and handled above
   if ((code >= 0x2600 && code <= 0x27BF) ||     // Miscellaneous Symbols and Dingbats
       (code >= 0x2300 && code <= 0x23FF) ||     // Miscellaneous Technical
       (code >= 0x2B00 && code <= 0x2BFF) ||     // Miscellaneous Symbols and Arrows
       (code >= 0x2100 && code <= 0x214F) ||     // Letterlike Symbols
       (code >= 0x2190 && code <= 0x21FF) ||     // Arrows
       (code >= 0x25A0 && code <= 0x25FF) ||     // Geometric Shapes
-      (code >= 0x2700 && code <= 0x27BF) ||     // Dingbats
-      (code >= 0x1F300 && code <= 0x1F5FF) ||   // Miscellaneous Symbols and Pictographs
-      (code >= 0x1F600 && code <= 0x1F64F) ||   // Emoticons
-      (code >= 0x1F680 && code <= 0x1F6FF) ||   // Transport and Map Symbols
-      (code >= 0x1F700 && code <= 0x1F77F) ||   // Alchemical Symbols
-      (code >= 0x1F780 && code <= 0x1F7FF) ||   // Geometric Shapes Extended
-      (code >= 0x1F800 && code <= 0x1F8FF) ||   // Supplemental Arrows-C
-      (code >= 0x1F900 && code <= 0x1F9FF) ||   // Supplemental Symbols and Pictographs
-      (code >= 0x1FA00 && code <= 0x1FA6F) ||   // Chess Symbols
-      (code >= 0x1FA70 && code <= 0x1FAFF)) {   // Symbols and Pictographs Extended-A
+      (code >= 0x2700 && code <= 0x27BF)) {     // Dingbats
     return 2;
   }
   
-  // CJK characters and other full-width characters
+  // CJK characters and other full-width characters (BMP only - codes below 0xFFFF)
+  // Note: CJK Extension B-G (codes >= 0x20000) are surrogate pairs and handled above
   if ((code >= 0x4E00 && code <= 0x9FFF) ||   // CJK Unified Ideographs
       (code >= 0x3040 && code <= 0x309F) ||   // Hiragana
       (code >= 0x30A0 && code <= 0x30FF) ||   // Katakana
@@ -57,13 +50,7 @@ export function getCharWidth(char: string): number {
       (code >= 0xFE50 && code <= 0xFE6F) ||   // Small Form Variants
       (code >= 0x3200 && code <= 0x32FF) ||   // Enclosed CJK Letters and Months
       (code >= 0x3300 && code <= 0x33FF) ||   // CJK Compatibility
-      (code >= 0x3400 && code <= 0x4DBF) ||   // CJK Extension A
-      (code >= 0x20000 && code <= 0x2A6DF) || // CJK Extension B
-      (code >= 0x2A700 && code <= 0x2B73F) || // CJK Extension C
-      (code >= 0x2B740 && code <= 0x2B81F) || // CJK Extension D
-      (code >= 0x2B820 && code <= 0x2CEAF) || // CJK Extension E
-      (code >= 0x2CEB0 && code <= 0x2EBEF) || // CJK Extension F
-      (code >= 0x30000 && code <= 0x3134F)) { // CJK Extension G
+      (code >= 0x3400 && code <= 0x4DBF)) {   // CJK Extension A
     return 2;
   }
   
