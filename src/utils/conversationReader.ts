@@ -20,6 +20,18 @@ function getClaudeProjectsDir(): string {
 
 const CLAUDE_PROJECTS_DIR = getClaudeProjectsDir();
 
+// File pattern constants for conversation files
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jsonl$/i;
+const AGENT_PATTERN = /^agent-[0-9a-f]+\.jsonl$/i;
+
+/**
+ * Check if a filename is a valid conversation file (UUID or agent format)
+ */
+function isConversationFile(filename: string): boolean {
+  return filename.endsWith('.jsonl') &&
+    (UUID_PATTERN.test(filename) || AGENT_PATTERN.test(filename));
+}
+
 interface PaginationOptions {
   limit: number;
   offset: number;
@@ -56,10 +68,7 @@ export async function getPaginatedConversations(options: PaginationOptions): Pro
       
       const projectPath = join(CLAUDE_PROJECTS_DIR, projectDir);
       const dirFiles = await readdir(projectPath);
-      // Match both UUID format and agent-* format files
-      const jsonlFiles = dirFiles.filter(f => f.endsWith('.jsonl') &&
-        (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jsonl$/i.test(f) ||
-         /^agent-[0-9a-f]+\.jsonl$/i.test(f)));
+      const jsonlFiles = dirFiles.filter(isConversationFile);
       
       for (const file of jsonlFiles) {
         const filePath = join(projectPath, file);
@@ -129,10 +138,7 @@ export async function getAllConversations(currentDirFilter?: string): Promise<Co
 
       const projectPath = join(CLAUDE_PROJECTS_DIR, projectDir);
       const files = await readdir(projectPath);
-      // Match both UUID format and agent-* format files
-      const jsonlFiles = files.filter(f => f.endsWith('.jsonl') &&
-        (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jsonl$/i.test(f) ||
-         /^agent-[0-9a-f]+\.jsonl$/i.test(f)));
+      const jsonlFiles = files.filter(isConversationFile);
 
       for (const file of jsonlFiles) {
         const filePath = join(projectPath, file);
@@ -204,24 +210,18 @@ async function readConversation(filePath: string, projectDir: string): Promise<C
     // Use session ID from filename for UUID files, or from message content for agent files
     // Agent files use the parent session's ID which is stored in the message's sessionId field
     let sessionId = filenameSessionId;
-    if (isAgentFile && messages.length > 0) {
-      // Get sessionId from the first message for agent files
-      const firstLine = lines.find(line => {
+    if (isAgentFile && lines.length > 0) {
+      // Get sessionId from the first valid line for agent files
+      for (const line of lines) {
         try {
           const data = JSON.parse(line);
-          return data.sessionId;
-        } catch {
-          return false;
-        }
-      });
-      if (firstLine) {
-        try {
-          const data = JSON.parse(firstLine);
-          if (data.sessionId) {
+          if (typeof data.sessionId === 'string' && data.sessionId) {
             sessionId = data.sessionId;
+            break;
           }
         } catch {
-          // Keep filename-based sessionId as fallback
+          // Continue to next line
+          continue;
         }
       }
     }
