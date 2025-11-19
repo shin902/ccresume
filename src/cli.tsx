@@ -5,6 +5,7 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import App from './App.js';
+import { getConfigPath } from './utils/configLoader.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -84,7 +85,7 @@ Examples:
   ccresume --dangerously-skip-permissions
 
 Configuration:
-  Key bindings can be customized in: ~/.config/ccresume/config.toml
+  Key bindings can be customized in: ${getConfigPath()}
   See example: https://github.com/sasazame/ccresume/blob/develop/config.toml.example
   
   Note: When new features are added that conflict with your custom key bindings,
