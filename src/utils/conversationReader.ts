@@ -20,6 +20,18 @@ function getClaudeProjectsDir(): string {
 
 const CLAUDE_PROJECTS_DIR = getClaudeProjectsDir();
 
+// File pattern constants for conversation files
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jsonl$/i;
+const AGENT_PATTERN = /^agent-[0-9a-f]+\.jsonl$/i;
+
+/**
+ * Check if a filename is a valid conversation file (UUID or agent format)
+ */
+function isConversationFile(filename: string): boolean {
+  return filename.endsWith('.jsonl') &&
+    (UUID_PATTERN.test(filename) || AGENT_PATTERN.test(filename));
+}
+
 interface PaginationOptions {
   limit: number;
   offset: number;
@@ -56,8 +68,7 @@ export async function getPaginatedConversations(options: PaginationOptions): Pro
       
       const projectPath = join(CLAUDE_PROJECTS_DIR, projectDir);
       const dirFiles = await readdir(projectPath);
-      const jsonlFiles = dirFiles.filter(f => f.endsWith('.jsonl') && 
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jsonl$/i.test(f));
+      const jsonlFiles = dirFiles.filter(isConversationFile);
       
       for (const file of jsonlFiles) {
         const filePath = join(projectPath, file);
@@ -127,8 +138,7 @@ export async function getAllConversations(currentDirFilter?: string): Promise<Co
 
       const projectPath = join(CLAUDE_PROJECTS_DIR, projectDir);
       const files = await readdir(projectPath);
-      const jsonlFiles = files.filter(f => f.endsWith('.jsonl') &&
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jsonl$/i.test(f));
+      const jsonlFiles = files.filter(isConversationFile);
 
       for (const file of jsonlFiles) {
         const filePath = join(projectPath, file);
@@ -160,8 +170,9 @@ async function readConversation(filePath: string, projectDir: string): Promise<C
       return null;
     }
     
-    // Extract session ID from filename
+    // Extract session ID from filename or message content
     const filename = basename(filePath);
+    const isAgentFile = filename.startsWith('agent-');
     const filenameSessionId = filename.replace('.jsonl', '');
     
     const messages: Message[] = [];
@@ -196,8 +207,24 @@ async function readConversation(filePath: string, projectDir: string): Promise<C
     const startTime = new Date(messages[0].timestamp);
     const endTime = new Date(messages[messages.length - 1].timestamp);
 
-    // Use session ID from filename as it's what Claude expects for --resume
-    const sessionId = filenameSessionId;
+    // Use session ID from filename for UUID files, or from message content for agent files
+    // Agent files use the parent session's ID which is stored in the message's sessionId field
+    let sessionId = filenameSessionId;
+    if (isAgentFile && lines.length > 0) {
+      // Get sessionId from the first valid line for agent files
+      for (const line of lines) {
+        try {
+          const data = JSON.parse(line);
+          if (typeof data.sessionId === 'string' && data.sessionId) {
+            sessionId = data.sessionId;
+            break;
+          }
+        } catch {
+          // Continue to next line
+          continue;
+        }
+      }
+    }
     
     // Get gitBranch from the last line of the jsonl file
     // Branch info is stored in the last line by newer versions of Claude Code
