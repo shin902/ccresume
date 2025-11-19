@@ -7,11 +7,49 @@ import { getCharWidth } from './charWidth.js';
  */
 export function strictTruncateByWidth(str: string, maxWidth: number): string {
   if (!str || maxWidth <= 0) return '';
-  
+
+  // Handle edge case where maxWidth is too small for ellipsis
+  if (maxWidth < 4) {
+    // Just return as much as we can fit without ellipsis
+    let width = 0;
+    let result = '';
+    let i = 0;
+    while (i < str.length) {
+      const code = str.charCodeAt(i);
+      let charSequence = '';
+      let charWidth = 0;
+
+      if (code >= 0xD800 && code <= 0xDBFF && i + 1 < str.length) {
+        const lowCode = str.charCodeAt(i + 1);
+        if (lowCode >= 0xDC00 && lowCode <= 0xDFFF) {
+          charSequence = str.slice(i, i + 2);
+          charWidth = 2;
+          i += 2;
+        } else {
+          charSequence = str[i];
+          charWidth = getCharWidth(str[i]);
+          i++;
+        }
+      } else {
+        charSequence = str[i];
+        charWidth = getCharWidth(str[i]);
+        i++;
+      }
+
+      if (width + charWidth > maxWidth) {
+        return result;
+      }
+
+      result += charSequence;
+      width += charWidth;
+    }
+    return result;
+  }
+
   let width = 0;
   let result = '';
   let i = 0;
-  
+
   // Reserve space for ellipsis if string needs truncation
   const ellipsisWidth = 3;
   const effectiveMaxWidth = maxWidth - ellipsisWidth;

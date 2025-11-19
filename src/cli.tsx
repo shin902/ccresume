@@ -4,10 +4,26 @@ import { render } from 'ink';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { existsSync } from 'fs';
 import App from './App.js';
+import { getConfigPath } from './utils/configLoader.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// Find package.json by searching up the directory tree
+function findPackageJson(startDir: string): string {
+  let dir = startDir;
+  while (dir !== dirname(dir)) {
+    const packagePath = join(dir, 'package.json');
+    if (existsSync(packagePath)) {
+      return packagePath;
+    }
+    dir = dirname(dir);
+  }
+  // Fallback to original relative path
+  return join(startDir, '..', 'package.json');
+}
 
 // Get command line arguments (excluding node and script path)
 const args = process.argv.slice(2);
@@ -84,7 +100,7 @@ Examples:
   ccresume --dangerously-skip-permissions
 
 Configuration:
-  Key bindings can be customized in: ~/.config/ccresume/config.toml
+  Key bindings can be customized in: ${getConfigPath()}
   See example: https://github.com/sasazame/ccresume/blob/develop/config.toml.example
   
   Note: When new features are added that conflict with your custom key bindings,
@@ -98,7 +114,7 @@ For more info: https://github.com/sasazame/ccresume`);
 
 // Handle --version
 if (filteredArgs.includes('--version') || filteredArgs.includes('-v')) {
-  const packageJson = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8'));
+  const packageJson = JSON.parse(readFileSync(findPackageJson(__dirname), 'utf-8'));
   console.log(packageJson.version);
   process.exit(0);
 }

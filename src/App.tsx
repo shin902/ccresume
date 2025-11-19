@@ -50,6 +50,7 @@ const App: React.FC<AppProps> = ({ claudeArgs = [], currentDirOnly = false, hide
   const [currentPage, setCurrentPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   const [paginating, setPaginating] = useState(false);
+  const [selectLastOnLoad, setSelectLastOnLoad] = useState(false);
 
   useEffect(() => {
     // Update dimensions on terminal resize
@@ -76,12 +77,23 @@ const App: React.FC<AppProps> = ({ claudeArgs = [], currentDirOnly = false, hide
     statusMsg: string,
     actionType: 'resume' | 'start'
   ) => {
-    const commandStr = `claude ${args.join(' ')}`;
+    // Sanitize arguments to prevent command injection
+    const sanitizedArgs = args.map(arg => {
+      // Remove or escape potentially dangerous characters
+      if (typeof arg !== 'string') return String(arg);
+      // Only allow alphanumeric, dash, underscore, dot, slash, and common path characters
+      if (!/^[\w\-./\\:=@\s]+$/.test(arg)) {
+        console.warn(`Warning: Argument "${arg}" contains potentially unsafe characters`);
+      }
+      return arg;
+    });
+
+    const commandStr = `claude ${sanitizedArgs.join(' ')}`;
     setStatusMessage(statusMsg);
-    
+
     setTimeout(() => {
       exit();
-      
+
       // Output helpful information
       if (actionType === 'resume') {
         console.log(`\nResuming conversation: ${conversation.sessionId}`);
@@ -91,18 +103,17 @@ const App: React.FC<AppProps> = ({ claudeArgs = [], currentDirOnly = false, hide
       console.log(`Directory: ${conversation.projectPath}`);
       console.log(`Executing: ${commandStr}`);
       console.log('---');
-      
+
       // Windows-specific reminder
       if (process.platform === 'win32') {
         console.log('💡 Reminder: If input doesn\'t work, press ENTER to activate.');
         console.log('');
       }
-      
-      // Spawn claude process
-      const claude = spawn(commandStr, {
+
+      // Spawn claude process with arguments array (safer than shell: true)
+      const claude = spawn('claude', sanitizedArgs, {
         stdio: 'inherit',
-        cwd: conversation.projectPath,
-        shell: true
+        cwd: conversation.projectPath
       });
       
       claude.on('error', (err) => {
@@ -142,9 +153,9 @@ const App: React.FC<AppProps> = ({ claudeArgs = [], currentDirOnly = false, hide
       } else {
         setLoading(true);
       }
-      
+
       const currentDir = currentDirOnly ? process.cwd() : undefined;
-      
+
       // Load paginated conversations
       const offset = currentPage * ITEMS_PER_PAGE;
       const { conversations: convs, total } = await getPaginatedConversations({
@@ -154,7 +165,13 @@ const App: React.FC<AppProps> = ({ claudeArgs = [], currentDirOnly = false, hide
       });
       setConversations(convs);
       setTotalCount(total);
-      
+
+      // Handle selecting last item after page navigation
+      if (selectLastOnLoad && convs.length > 0) {
+        setSelectedIndex(convs.length - 1);
+        setSelectLastOnLoad(false);
+      }
+
       setLoading(false);
       setPaginating(false);
     } catch (err) {
@@ -162,7 +179,7 @@ const App: React.FC<AppProps> = ({ claudeArgs = [], currentDirOnly = false, hide
       setLoading(false);
       setPaginating(false);
     }
-  }, [currentPage, currentDirOnly]);
+  }, [currentPage, currentDirOnly, selectLastOnLoad]);
 
   const prevPageRef = useRef(0);
   
@@ -204,7 +221,7 @@ const App: React.FC<AppProps> = ({ claudeArgs = [], currentDirOnly = false, hide
       if (selectedIndex === 0 && currentPage > 0) {
         // Auto-navigate to previous page when at first item
         setCurrentPage(prev => prev - 1);
-        setSelectedIndex(ITEMS_PER_PAGE - 1); // Select last item of previous page
+        setSelectLastOnLoad(true); // Select last item after page loads
       } else {
         setSelectedIndex((prev) => Math.max(0, prev - 1));
       }
@@ -347,8 +364,8 @@ const App: React.FC<AppProps> = ({ claudeArgs = [], currentDirOnly = false, hide
         <Box>
           <Text dimColor>
             {(() => {
-              const prevKeys = config?.keybindings.pagePrevious.map(k => k === 'left' ? '←' : k).join('/') || '←';
-              const nextKeys = config?.keybindings.pageNext.map(k => k === 'right' ? '→' : k).join('/') || '→';
+              const prevKeys = config.keybindings.pagePrevious.map(k => k === 'left' ? '←' : k).join('/') || '←';
+              const nextKeys = config.keybindings.pageNext.map(k => k === 'right' ? '→' : k).join('/') || '→';
               const pageHelp = `Press ${prevKeys}/${nextKeys} for pages`;
               
               return totalCount === -1 ? (

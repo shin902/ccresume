@@ -1,5 +1,5 @@
 import type { Conversation } from '../types.js';
-import { extractMessageText } from './messageUtils.js';
+import { extractMessageText, isToolResultContent } from './messageUtils.js';
 
 export function generateConversationSummary(conversation: Conversation): string {
   // Get user messages that have actual text content (not tool results)
@@ -7,13 +7,13 @@ export function generateConversationSummary(conversation: Conversation): string 
     .filter(m => {
       if (m.type !== 'user') return false;
       if (!m.message?.content) return false;
-      
-      // Skip tool result messages
-      const content = extractMessageText(m.message.content);
-      if (content.startsWith('[Tool Result]') || content.startsWith('[Tool Output]')) {
+
+      // Skip tool result messages using common utility
+      if (isToolResultContent(m.message.content)) {
         return false;
       }
-      
+
+      const content = extractMessageText(m.message.content);
       return content.trim().length > 0;
     });
   
